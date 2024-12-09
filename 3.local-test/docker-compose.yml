@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ../1.frontend
+      dockerfile: Dockerfile
+    container_name: mvs-frontend
+    ports:
+      - "8080:80"
+    environment:
+      - REACT_APP_API_URL=http://localhost:3000/api
+    depends_on:
+      - backend
+    networks:
+      - mvs-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../2.backend
+      dockerfile: Dockerfile
+    container_name: mvs-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - MONGODB_LOCAL_URI=mongodb://mongodb:27017/movie-streaming
+      - LOCAL_STORAGE_PATH=/app/uploads
+      - UPLOAD_MAX_FILE_SIZE=100000000
+    volumes:
+      - ./sample-data:/app/uploads
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - mvs-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:6
+    container_name: mvs-mongodb
+    environment:
+      - MONGO_DATA_DIR=/data/db
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - mvs-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
+
+networks:
+  mvs-network:
+    name: mvs-network
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    name: mvs-mongodb-data
